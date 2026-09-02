@@ -7,4 +7,9 @@ PyInstaller 产物按平台放入本目录子文件夹，由 Electron 主进程�
 ./scripts/build-sidecar.sh
 ```
 
+```bat
+REM Windows（cmd / Git Bash；会绕过 PowerShell 执行策略）
+scripts\build-sidecar.cmd
+```
+
 详见 `docs/Hermes集成说明.md`。
