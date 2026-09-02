@@ -11,8 +11,10 @@
     "electron:dev": "env -u ELECTRON_RUN_AS_NODE concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on tcp:127.0.0.1:5173 && env -u ELECTRON_RUN_AS_NODE electron electron/dev-main.cjs\"",
     "electron:build": "npm run build && electron-builder",
     "electron:build:mac": "npm run build && electron-builder --mac --arm64",
+    "electron:build:mac:x64": "npm run build && electron-builder --mac --x64",
     "electron:build:mac:dir": "npm run build && electron-builder --mac --arm64 --dir",
     "electron:build:mac:zip": "npm run build && electron-builder --mac zip --arm64",
+    "electron:build:win": "npm run build && electron-builder --win --x64",
     "build:electron-main": "tsc -p tsconfig.node.json",
     "test": "vitest run"
   },
@@ -69,6 +71,7 @@
       "category": "public.app-category.productivity"
     },
     "win": {
+      "signAndEditExecutable": false,
       "extraResources": [
         {
           "from": "../../resources/sidecars/win32-${arch}/",

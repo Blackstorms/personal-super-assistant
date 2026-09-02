@@ -292,7 +292,7 @@ async def test_profile(profile_id: str, db: aiosqlite.Connection = Depends(db_de
     r = await cur.fetchone()
     if not r:
         raise HTTPException(404, detail={"code": "not_found", "message": "profile not found"})
-    gw = LLMGateway(
+    gw = create_gateway(
         base_url=r["base_url"] or "https://api.openai.com/v1",
         api_key=r["api_key"] or "",
         model=r["model"] or "gpt-4o-mini",

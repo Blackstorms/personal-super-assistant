@@ -6,8 +6,9 @@ echo "[PSA] project root: $ROOT"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1"; exit 1; }; }
 need python3
-need node
-need npm
+# shellcheck source=lib/ensure-node.sh
+. "$ROOT/scripts/lib/ensure-node.sh"
+psa_ensure_npm
 
 echo "[PSA] setup Python venv"
 if command -v uv >/dev/null 2>&1; then

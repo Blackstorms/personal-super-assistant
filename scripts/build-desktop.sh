@@ -1,14 +1,51 @@
 #!/usr/bin/env bash
-# 构建说明：在本机架构生成桌面产物；sidecar 需另用 PyInstaller 按目标 arch 构建
+# One-click desktop installer for the current Mac/Linux machine.
+# Requires the matching sidecar (see scripts/build-sidecar.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DESKTOP="$ROOT/apps/desktop"
+
+export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"
+export ELECTRON_BUILDER_BINARIES_MIRROR="${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/}"
+
 OS="$(uname -s)"
 ARCH="$(uname -m)"
-echo "Building desktop for $OS $ARCH"
-cd "$ROOT/apps/desktop"
+case "$OS" in
+  Darwin)
+    if [[ "$ARCH" == "arm64" ]]; then
+      PLAT="darwin-arm64"
+      SIDECAR="$ROOT/resources/sidecars/darwin-arm64/server-darwin-arm64"
+      NPM_SCRIPT="electron:build:mac"
+    else
+      PLAT="darwin-x64"
+      SIDECAR="$ROOT/resources/sidecars/darwin-x64/server-darwin-x64"
+      NPM_SCRIPT="electron:build:mac:x64"
+    fi
+    ;;
+  Linux)
+    echo "[PSA] Linux is not a contest target. Use build-desktop.cmd on Windows, or this script on macOS."
+    exit 1
+    ;;
+  *)
+    echo "[PSA] Unsupported OS: $OS (use scripts/build-desktop.cmd on Windows)"
+    exit 1
+    ;;
+esac
+
+# shellcheck source=lib/ensure-node.sh
+. "$ROOT/scripts/lib/ensure-node.sh"
+psa_ensure_npm
+
+echo "[PSA] desktop build for $PLAT"
+if [[ ! -f "$SIDECAR" ]]; then
+  echo "[PSA] ERROR: missing sidecar: $SIDECAR"
+  echo "[PSA] Run ./scripts/build-sidecar.sh first, then retry."
+  exit 1
+fi
+
+cd "$DESKTOP"
 npm install
-npm run build || true
-# electron-builder 需要本机环境；文档中说明三端产物目录约定
-npx electron-builder --dir || echo "electron-builder skipped/failed — see docs for cross-build"
-mkdir -p "$ROOT/resources/sidecars"
-echo "Place PyInstaller outputs under resources/sidecars/{darwin-arm64,darwin-x64,win32-x64}/"
+npm run "$NPM_SCRIPT"
+
+echo "[PSA] done. Installers are under $DESKTOP/release/"
+ls -lh "$DESKTOP/release"/*.{dmg,zip,exe} 2>/dev/null || ls -lh "$DESKTOP/release" || true

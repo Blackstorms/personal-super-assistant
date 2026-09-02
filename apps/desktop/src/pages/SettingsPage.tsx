@@ -47,6 +47,8 @@ export default function SettingsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [form, setForm] = useState(emptyForm())
   const [editId, setEditId] = useState<string | null>(null)
+  const [apiKeyMasked, setApiKeyMasked] = useState('')
+  const [apiKeyTouched, setApiKeyTouched] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [health, setHealth] = useState<Health | null>(null)
   const [toolsets, setToolsets] = useState<Array<{ id: string; name: string; enabled: boolean }>>([])
@@ -87,12 +89,16 @@ export default function SettingsPage() {
 
   const openCreate = () => {
     setEditId(null)
+    setApiKeyMasked('')
+    setApiKeyTouched(false)
     setForm(emptyForm())
     setModalOpen(true)
   }
 
   const openEdit = (p: Profile) => {
     setEditId(p.id)
+    setApiKeyMasked(p.api_key_masked || '')
+    setApiKeyTouched(false)
     setForm({
       name: p.name,
       base_url: p.base_url,
@@ -108,6 +114,8 @@ export default function SettingsPage() {
   const closeModal = () => {
     setModalOpen(false)
     setEditId(null)
+    setApiKeyMasked('')
+    setApiKeyTouched(false)
     setForm(emptyForm())
   }
 
@@ -123,7 +131,7 @@ export default function SettingsPage() {
           max_tokens: form.max_tokens,
           is_default: form.is_default,
         }
-        if (form.api_key) body.api_key = form.api_key
+        if (apiKeyTouched && form.api_key.trim()) body.api_key = form.api_key.trim()
         await apiRequest('PATCH', `/api/v1/settings/llm/profiles/${editId}`, body)
       } else {
         await apiRequest('POST', '/api/v1/settings/llm/profiles', {
@@ -162,7 +170,7 @@ export default function SettingsPage() {
   const probeForm = async () => {
     setSaving(true)
     try {
-      if (editId && !form.api_key) {
+      if (editId && !(apiKeyTouched && form.api_key.trim())) {
         const p = profiles.find((x) => x.id === editId)
         if (p) {
           setSaving(false)
@@ -324,10 +332,29 @@ export default function SettingsPage() {
           />
           <label className="muted">API Key</label>
           <input
-            type="password"
-            value={form.api_key}
-            placeholder={editId ? '留空则不修改' : '可选（本地 Ollama 可空）'}
-            onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+            type={apiKeyTouched || !editId ? 'password' : 'text'}
+            value={
+              editId && !apiKeyTouched
+                ? apiKeyMasked
+                : form.api_key
+            }
+            placeholder={
+              editId
+                ? apiKeyMasked
+                  ? '留空则不修改'
+                  : '未设置'
+                : '可选（本地 Ollama 可空）'
+            }
+            onFocus={() => {
+              if (editId && !apiKeyTouched) {
+                setApiKeyTouched(true)
+                setForm({ ...form, api_key: '' })
+              }
+            }}
+            onChange={(e) => {
+              setApiKeyTouched(true)
+              setForm({ ...form, api_key: e.target.value })
+            }}
           />
           <label className="row muted">
             <input

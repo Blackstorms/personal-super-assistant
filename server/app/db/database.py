@@ -353,17 +353,19 @@ async def _upgrade_compress_max_tokens(db: aiosqlite.Connection) -> None:
 
 
 async def _ensure_default_llm_profile(db: aiosqlite.Connection) -> None:
-    """从旧 llm 设置或空配置迁移出默认 profile。"""
+    """从旧 llm 设置或空配置迁移出默认 profile（预置写入后通常已有行）。"""
     cur = await db.execute("SELECT COUNT(*) AS c FROM llm_profiles")
     count = (await cur.fetchone())["c"]
     if count > 0:
         return
     cfg = await fetch_setting(db, "llm") or {
-        "base_url": "https://api.openai.com/v1",
+        "base_url": (
+            "https://ws-zgs22qb92hlvflcg.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+        ),
         "api_key": "",
-        "model": "gpt-4o-mini",
+        "model": "qwen3.8-max",
         "temperature": 0.7,
-        "max_tokens": 2048,
+        "max_tokens": 8192,
     }
     now = utc_now()
     await db.execute(
@@ -375,11 +377,12 @@ async def _ensure_default_llm_profile(db: aiosqlite.Connection) -> None:
         (
             str(uuid.uuid4()),
             "默认模型",
-            cfg.get("base_url") or "https://api.openai.com/v1",
+            cfg.get("base_url")
+            or "https://ws-zgs22qb92hlvflcg.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
             cfg.get("api_key") or "",
-            cfg.get("model") or "gpt-4o-mini",
+            cfg.get("model") or "qwen3.8-max",
             float(cfg.get("temperature", 0.7)),
-            int(cfg.get("max_tokens", 2048)),
+            int(cfg.get("max_tokens", 8192)),
             1,
             now,
             now,
@@ -406,7 +409,7 @@ async def init_db() -> None:
             """,
             (json.dumps({"token": token}), utc_now()),
         )
-        # 默认 LLM 配置（空 key，用户在设置页填写）
+        # 默认 LLM 配置（与预置 qwen 对齐；密钥由 ensure_preset_llm_profiles 写入）
         cur = await db.execute("SELECT value_json FROM app_settings WHERE key='llm'")
         row = await cur.fetchone()
         if row is None:
@@ -418,11 +421,14 @@ async def init_db() -> None:
                 (
                     json.dumps(
                         {
-                            "base_url": "https://api.openai.com/v1",
+                            "base_url": (
+                                "https://ws-zgs22qb92hlvflcg.cn-beijing.maas.aliyuncs.com"
+                                "/compatible-mode/v1"
+                            ),
                             "api_key": "",
-                            "model": "gpt-4o-mini",
+                            "model": "qwen3.8-max",
                             "temperature": 0.7,
-                            "max_tokens": 2048,
+                            "max_tokens": 8192,
                         }
                     ),
                     utc_now(),
@@ -446,10 +452,12 @@ async def init_db() -> None:
                 utc_now(),
             ),
         )
-        await _ensure_default_llm_profile(db)
         from app.experts.presets import ensure_preset_experts
+        from app.llm.presets import ensure_preset_llm_profiles
         from app.mcp.presets import ensure_preset_mcps, upgrade_preset_mcps
 
+        await ensure_preset_llm_profiles(db)
+        await _ensure_default_llm_profile(db)
         await ensure_preset_mcps(db)
         await upgrade_preset_mcps(db)
         await ensure_preset_experts(db)

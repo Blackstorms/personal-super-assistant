@@ -140,6 +140,36 @@ async def list_messages(
     return {"items": items}
 
 
+@router.get("/{session_id}/active-run")
+async def get_active_run(session_id: str, db: aiosqlite.Connection = Depends(db_dep)):
+    """查询会话是否有后台进行中的 run（定时任务 headless 执行时无本机 SSE）。"""
+    cur = await db.execute("SELECT id FROM sessions WHERE id=?", (session_id,))
+    if not await cur.fetchone():
+        raise HTTPException(404, detail={"code": "not_found", "message": "session not found"})
+    cur = await db.execute(
+        """
+        SELECT id, status, started_at, error_message
+        FROM chat_runs
+        WHERE session_id=? AND status IN ('running', 'waiting_confirm')
+        ORDER BY started_at DESC
+        LIMIT 1
+        """,
+        (session_id,),
+    )
+    row = await cur.fetchone()
+    if not row:
+        return {"active": False, "run": None}
+    return {
+        "active": True,
+        "run": {
+            "id": row["id"],
+            "status": row["status"],
+            "started_at": row["started_at"],
+            "error_message": row["error_message"],
+        },
+    }
+
+
 @router.get("/{session_id}/pending-confirm")
 async def get_pending_confirm(session_id: str, db: aiosqlite.Connection = Depends(db_dep)):
     """恢复高风险工具确认条（刷新/重进会话后仍可点确认）。"""

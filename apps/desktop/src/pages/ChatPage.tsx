@@ -85,6 +85,11 @@ export default function ChatPage() {
   } = useAppStore()
   const currentStreaming = sessionId ? Boolean(activeRuns[sessionId]) : false
   const currentRunId = sessionId ? activeRuns[sessionId] : undefined
+  /** 定时任务等 headless run：本机无 SSE，靠轮询刷新并保持「思考中」态 */
+  const [remoteRunning, setRemoteRunning] = useState(false)
+  const [remoteRunId, setRemoteRunId] = useState<string | null>(null)
+  const viewStreaming = currentStreaming || remoteRunning
+  const effectiveRunId = currentRunId || remoteRunId || undefined
   const [input, setInput] = useState('')
   const [scheduleCompose, setScheduleCompose] = useState(false)
   const [profiles, setProfiles] = useState<Profile[]>([])
@@ -270,21 +275,83 @@ export default function ChatPage() {
 
   useEffect(() => {
     setAttachedFiles([])
+    setRemoteRunning(false)
+    setRemoteRunId(null)
   }, [sessionId])
 
+  // 打开定时任务会话时：若后端仍在跑，轮询消息直到结束（避免工具跑完后像卡住）
   useEffect(() => {
-    if (!currentStreaming) {
-      setStreamHint('')
+    if (!sessionId || currentStreaming) {
+      if (currentStreaming) {
+        setRemoteRunning(false)
+        setRemoteRunId(null)
+      }
+      return
+    }
+    const sid = sessionId
+    let cancelled = false
+    let timer: number | undefined
+    let wasActive = false
+
+    const poll = async () => {
+      try {
+        const st = await apiRequest<{
+          active: boolean
+          run?: { id: string; status: string } | null
+        }>('GET', `/api/v1/sessions/${sid}/active-run`)
+        if (cancelled || useAppStore.getState().sessionId !== sid) return
+        if (useAppStore.getState().activeRuns[sid]) return
+
+        if (st.active) {
+          wasActive = true
+          setRemoteRunning(true)
+          setRemoteRunId(st.run?.id || null)
+          lastStreamEventAt.current = Date.now()
+          setStreamHint((prev) => prev || '后台任务执行中（完成后会自动刷新）…')
+          await loadMessages(sid)
+          if (!cancelled) timer = window.setTimeout(() => void poll(), 1600)
+          return
+        }
+
+        setRemoteRunning(false)
+        setRemoteRunId(null)
+        if (wasActive) {
+          wasActive = false
+          setStreamHint('')
+          await loadMessages(sid)
+          void loadPendingConfirm(sid)
+          bumpSessionList()
+        }
+      } catch {
+        if (!cancelled) timer = window.setTimeout(() => void poll(), 3200)
+      }
+    }
+
+    void poll()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [sessionId, currentStreaming])
+
+  useEffect(() => {
+    if (!viewStreaming) {
+      if (!remoteRunning) setStreamHint('')
       return
     }
     const tick = window.setInterval(() => {
       const idle = Date.now() - lastStreamEventAt.current
       if (idle > 20000) {
-        setStreamHint((prev) => prev || '模型仍在生成（长思考中，可点停止）…')
+        setStreamHint((prev) =>
+          prev ||
+          (remoteRunning
+            ? '后台仍在生成（长思考或联网搜索中）…'
+            : '模型仍在生成（长思考中，可点停止）…'),
+        )
       }
     }, 4000)
     return () => window.clearInterval(tick)
-  }, [currentStreaming])
+  }, [viewStreaming, remoteRunning])
 
   useEffect(() => {
     let cancelled = false
@@ -337,7 +404,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [messages, currentStreaming])
+  }, [messages, viewStreaming])
 
   const applyComposerBindings = useCallback((defaults: ComposerBindingDefaults) => {
     setExpertId(defaults.expertId)
@@ -510,7 +577,7 @@ export default function ChatPage() {
 
   const send = async () => {
     if (!input.trim()) return
-    if (currentStreaming) return
+    if (viewStreaming) return
     if (!llmReady) {
       setError('请先在设置中配置模型')
       return
@@ -702,11 +769,14 @@ export default function ChatPage() {
   }
 
   const stop = async () => {
-    if (!sessionId || !currentRunId) return
+    if (!sessionId || !effectiveRunId) return
     const sid = sessionId
-    const runId = currentRunId
+    const runId = effectiveRunId
     // 立刻解锁 UI；pending 时后端按 session 停止
     setSessionRun(sid, null)
+    setRemoteRunning(false)
+    setRemoteRunId(null)
+    setStreamHint('')
     streamAbortRef.current?.abort()
     streamAbortRef.current = null
     try {
@@ -717,6 +787,7 @@ export default function ChatPage() {
     } catch {
       // 停止失败时 UI 已解锁；忽略
     }
+    void loadMessages(sid)
   }
 
   const resolveConfirm = async (approve: boolean) => {
@@ -805,7 +876,7 @@ export default function ChatPage() {
     </button>
   ) : null
 
-  const buddyMood = resolveBuddyMood(input, Boolean(currentStreaming))
+  const buddyMood = resolveBuddyMood(input, Boolean(viewStreaming))
 
   const composer = (
     <div className={`composer${empty ? ' composer-with-buddy' : ''}`}>
@@ -870,7 +941,7 @@ export default function ChatPage() {
           )}
         </div>
         <div className="right">
-          {currentStreaming && (
+          {viewStreaming && (
             <button type="button" className="ghost" onClick={() => void stop()}>
               停止
             </button>
@@ -892,7 +963,7 @@ export default function ChatPage() {
           <button
             type="button"
             className="icon-btn send"
-            disabled={currentStreaming || !input.trim()}
+            disabled={viewStreaming || !input.trim()}
             onClick={() => void send()}
             title="发送 Enter"
           >
@@ -966,12 +1037,12 @@ export default function ChatPage() {
         </header>
       )}
       <div className="chat-log chat-wrap" ref={logRef}>
-        <ChatLog messages={messages} streaming={currentStreaming} />
+        <ChatLog messages={messages} streaming={viewStreaming} />
       </div>
       <div className="chat-composer-dock">
         {confirmUi}
         {error && <div className="error-line chat-inline-error">错误：{error}</div>}
-        {currentStreaming && streamHint ? (
+        {viewStreaming && streamHint ? (
           <div className="stream-hint muted">{streamHint}</div>
         ) : null}
         {composer}

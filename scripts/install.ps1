@@ -1,4 +1,4 @@
-# Windows PowerShell 一键安装脚本
+﻿# Windows PowerShell 一键安装脚本
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Write-Host "[PSA] root: $Root"
@@ -7,7 +7,8 @@ function Need($cmd) {
   if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { throw "missing: $cmd" }
 }
 Need python
-Need npm
+. (Join-Path $PSScriptRoot "lib\ensure-node.ps1")
+Ensure-PsaNpm
 
 Write-Host "[PSA] python venv"
 if (Get-Command uv -ErrorAction SilentlyContinue) {
