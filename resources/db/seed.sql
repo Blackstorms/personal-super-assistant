@@ -1,0 +1,2 @@
+-- Optional seed: create a default workspace name hint (applied by app optionally)
+-- INSERT examples are handled at runtime to avoid hard-coded UUIDs here.

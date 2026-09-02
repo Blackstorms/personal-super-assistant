@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>个人超级助理</title>
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem('psa_theme_mode') || 'light';
+          var accent = localStorage.getItem('psa_theme_accent') || 'ink';
+          var legacy = {
+            'ocean-dark': 'deepsea-dark',
+            'ocean-light': 'deepsea-light',
+            'scholar-dark': 'scroll-dark',
+            'scholar-light': 'scroll-light',
+            paper: 'light',
+            frost: 'light',
+            'velvet-dark': 'dark',
+            'velvet-light': 'light',
+            'aurora-dark': 'dark',
+            'aurora-light': 'light',
+            'softneu-dark': 'dark',
+            'softneu-light': 'light',
+            'noir-dark': 'dark',
+            'noir-light': 'light'
+          };
+          if (legacy[mode]) mode = legacy[mode];
+          var darkThemes = { dark: 1, 'deepsea-dark': 1, 'scroll-dark': 1, 'glass-dark': 1 };
+          if (mode === 'system') {
+            mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.dataset.theme = mode;
+          document.documentElement.dataset.accent = accent;
+          document.documentElement.style.colorScheme = darkThemes[mode] ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module" src="/src/main.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

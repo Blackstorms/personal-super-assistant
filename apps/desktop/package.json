@@ -1,0 +1,95 @@
+{
+  "name": "personal-super-assistant-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal Super Assistant desktop client (Electron + React + TS)",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && tsc -p tsconfig.node.json",
+    "preview": "vite preview",
+    "electron:dev": "env -u ELECTRON_RUN_AS_NODE concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on tcp:127.0.0.1:5173 && env -u ELECTRON_RUN_AS_NODE electron electron/dev-main.cjs\"",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:mac": "npm run build && electron-builder --mac --arm64",
+    "electron:build:mac:dir": "npm run build && electron-builder --mac --arm64 --dir",
+    "electron:build:mac:zip": "npm run build && electron-builder --mac zip --arm64",
+    "build:electron-main": "tsc -p tsconfig.node.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.28.0",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^2.1.5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.psa.assistant",
+    "productName": "PersonalSuperAssistant",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "mac": {
+      "extraResources": [
+        {
+          "from": "../../resources/sidecars/darwin-${arch}/",
+          "to": "sidecars",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ],
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "extraResources": [
+        {
+          "from": "../../resources/sidecars/win32-${arch}/",
+          "to": "sidecars",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

@@ -1,0 +1,66 @@
+[project]
+name = "personal-super-assistant-server"
+version = "1.0.0"
+description = "Personal Super Assistant FastAPI sidecar"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "openai>=1.55.0",
+    "httpx>=0.27.0",
+    "requests>=2.32.0",
+    "pyyaml>=6.0.2",
+    "python-multipart>=0.0.12",
+    "aiosqlite>=0.20.0",
+    "eval_type_backport>=0.2.0",
+    "python-dotenv>=1.0.0",
+    "mcp>=1.1.0",
+    "pypdf>=5.0.0",
+    "tiktoken>=0.7.0",
+    "sse-starlette>=2.1.0",
+    "croniter>=2.0.0",
+    "packaging>=24.0",
+]
+
+[project.optional-dependencies]
+web = [
+    "ddgs>=9.0.0",
+]
+hermes = [
+    "ruamel.yaml>=0.18.0",
+    "tenacity>=8.0.0",
+    "rich>=13.0.0",
+    "snowballstemmer>=2.0.0",
+]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "personal-super-assistant-server[hermes]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+# 网络可用时请运行 `uv lock` 刷新本仓库 uv.lock（当前锁为离线生成的可解析基线）。
+[tool.uv]
+package = true
