@@ -45,6 +45,9 @@ export default function BootScreen({
   )
 }
 
+/** 后端已就绪也至少展示启动页，避免窗口 show 时已经切走 */
+const MIN_BOOT_VISIBLE_MS = 1800
+
 export function useBackendBoot() {
   const [ready, setReady] = useState(false)
   const [progress, setProgress] = useState(6)
@@ -56,10 +59,24 @@ export function useBackendBoot() {
 
   useEffect(() => {
     let stopped = false
+    let finishTimer: ReturnType<typeof setTimeout> | null = null
     const started = Date.now()
     setProgress(6)
     setFailed(false)
     setError('')
+
+    const finish = (elapsed: number) => {
+      setProgress(100)
+      const wait = Math.max(0, MIN_BOOT_VISIBLE_MS - elapsed)
+      if (wait === 0) {
+        setReady(true)
+        return
+      }
+      if (finishTimer) return
+      finishTimer = setTimeout(() => {
+        if (!stopped) setReady(true)
+      }, wait)
+    }
 
     const tick = async () => {
       if (stopped) return
@@ -74,8 +91,7 @@ export function useBackendBoot() {
           const s = await window.api.backendStatus()
           if (stopped) return
           if (s.healthy) {
-            setProgress(100)
-            setReady(true)
+            finish(elapsed)
             return
           }
           if (s.error) setError(s.error)
@@ -83,8 +99,7 @@ export function useBackendBoot() {
           const r = await fetch('http://127.0.0.1:18765/api/v1/health')
           if (stopped) return
           if (r.ok) {
-            setProgress(100)
-            setReady(true)
+            finish(elapsed)
             return
           }
         }
@@ -99,6 +114,7 @@ export function useBackendBoot() {
     return () => {
       stopped = true
       clearInterval(t)
+      if (finishTimer) clearTimeout(finishTimer)
     }
   }, [nonce])
 

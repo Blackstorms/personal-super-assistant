@@ -13,7 +13,8 @@ export type ApiRequest = {
 const api = {
   backendStatus: () => ipcRenderer.invoke('backend:status'),
   backendRestart: () => ipcRenderer.invoke('backend:restart'),
-  forceLogin: process.env.PSA_SHOW_LOGIN === '1' || process.env.VITE_PSA_SHOW_LOGIN === '1',
+  // 本文件只打进安装包；开发态走 electron/dev-preload.cjs。每次打开都进登录页。
+  forceLogin: true,
   setAuthToken: (token: string) => ipcRenderer.invoke('auth:setToken', token),
   clearAuthToken: () => ipcRenderer.invoke('auth:clearToken'),
   setThemeSource: (source: 'system' | 'light' | 'dark') => ipcRenderer.invoke('theme:setSource', source),
