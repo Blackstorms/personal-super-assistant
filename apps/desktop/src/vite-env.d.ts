@@ -1,5 +1,11 @@
+/// <reference types="vite/client" />
+
 /** Renderer 全局类型：preload 暴露的 window.api */
 export {}
+
+interface ImportMetaEnv {
+  readonly VITE_PSA_SHOW_LOGIN?: string
+}
 
 declare global {
   interface Window {

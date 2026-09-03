@@ -11,15 +11,25 @@ Need python
 Ensure-PsaNpm
 
 Write-Host "[PSA] python venv"
-if (Get-Command uv -ErrorAction SilentlyContinue) {
-  Write-Host "[PSA] using uv"
+$venvPy = "$Root\server\.venv\Scripts\python.exe"
+$venvPy312 = "$Root\server\.venv312\Scripts\python.exe"
+if ((Test-Path $venvPy) -or (Test-Path $venvPy312)) {
+  Write-Host "[PSA] reuse existing server\.venv"
+} elseif (Get-Command uv -ErrorAction SilentlyContinue) {
+  Write-Host "[PSA] creating venv with uv"
   Push-Location "$Root\server"
   uv venv .venv --python 3.12
-  & "$Root\server\.venv\Scripts\uv.exe" pip install -r "$Root\server\requirements.txt"
-  if (-not $?) { & "$Root\server\.venv\Scripts\pip.exe" install -r "$Root\server\requirements.txt" }
   Pop-Location
 } else {
   python -m venv "$Root\server\.venv"
+}
+
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+  Push-Location "$Root\server"
+  uv pip install -r "$Root\server\requirements.txt"
+  if (-not $?) { & "$Root\server\.venv\Scripts\pip.exe" install -r "$Root\server\requirements.txt" }
+  Pop-Location
+} else {
   & "$Root\server\.venv\Scripts\pip.exe" install -U pip
   & "$Root\server\.venv\Scripts\pip.exe" install -r "$Root\server\requirements.txt"
 }

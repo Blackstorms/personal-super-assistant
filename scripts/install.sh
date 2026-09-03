@@ -11,30 +11,38 @@ need python3
 psa_ensure_npm
 
 echo "[PSA] setup Python venv"
-if command -v uv >/dev/null 2>&1; then
-  echo "[PSA] using uv sync"
-  cd "$ROOT/server"
-  uv venv .venv --python 3.12 || uv venv .venv
-  # shellcheck disable=SC1091
-  source "$ROOT/server/.venv/bin/activate"
-  uv pip install -e ".[dev,hermes]" || uv pip install -r requirements.txt
-  cd "$ROOT"
+cd "$ROOT/server"
+if [[ -x .venv/bin/python || -x .venv312/bin/python ]]; then
+  echo "[PSA] reuse existing server/.venv"
 else
-  python3 -m venv "$ROOT/server/.venv"
-  # shellcheck disable=SC1091
-  source "$ROOT/server/.venv/bin/activate"
-  pip install -U pip
-  pip install -r "$ROOT/server/requirements.txt"
+  if command -v uv >/dev/null 2>&1; then
+    echo "[PSA] creating venv with uv"
+    uv venv .venv --python 3.12 || uv venv .venv
+  else
+    python3 -m venv "$ROOT/server/.venv"
+  fi
 fi
 
-if [[ -x "$ROOT/server/.venv/bin/python" ]]; then
+if [[ -x .venv/bin/python ]]; then
   PY="$ROOT/server/.venv/bin/python"
-elif [[ -x "$ROOT/server/.venv312/bin/python" ]]; then
+  # shellcheck disable=SC1091
+  source "$ROOT/server/.venv/bin/activate"
+elif [[ -x .venv312/bin/python ]]; then
   PY="$ROOT/server/.venv312/bin/python"
+  # shellcheck disable=SC1091
+  source "$ROOT/server/.venv312/bin/activate"
 else
   echo "[PSA] ERROR: venv python missing under server/.venv"
   exit 1
 fi
+
+if command -v uv >/dev/null 2>&1; then
+  uv pip install -e ".[dev,hermes]" || uv pip install -r requirements.txt
+else
+  pip install -U pip
+  pip install -r "$ROOT/server/requirements.txt"
+fi
+cd "$ROOT"
 
 HERMES="$ROOT/third_party/hermes-agent"
 if [[ -f "$HERMES/model_tools.py" ]]; then
