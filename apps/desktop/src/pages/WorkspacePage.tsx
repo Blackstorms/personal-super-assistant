@@ -30,7 +30,7 @@ type Session = { id: string; title: string; updated_at?: string }
 export default function WorkspacePage() {
   const navigate = useNavigate()
   const { workspaceId: routeWorkspaceId } = useParams<{ workspaceId: string }>()
-  const { workspaceId, setWorkspaceId, setSessionId, setMessages, activeRuns, requestApplyWorkspaceDefaults } =
+  const { workspaceId, setWorkspaceId, setSessionId, setMessages, activeRuns, requestApplyWorkspaceDefaults, bumpWorkspaceList } =
     useAppStore()
   const activeWorkspaceId = routeWorkspaceId || workspaceId
   const [project, setProject] = useState<Project | null>(null)
@@ -72,7 +72,7 @@ export default function WorkspacePage() {
 
   const loadProject = async (id: string) => {
     const items = await apiRequest<{ items: Project[] }>('GET', '/api/v1/workspaces')
-    const p = items.items.find((x) => x.id === id) || null
+    const p = items.items.find((x) => x.id === id && x.status === 'active') || null
     setProject(p)
     if (p) {
       setForm({
@@ -84,6 +84,11 @@ export default function WorkspacePage() {
         mcpIds: p.mcp_ids || [],
         knowledgeIds: p.knowledge_ids || [],
       })
+    } else {
+      // 已归档/删除：清侧栏选中并回项目列表
+      if (workspaceId === id) setWorkspaceId(null)
+      bumpWorkspaceList()
+      navigate('/projects', { replace: true })
     }
   }
 
@@ -227,6 +232,8 @@ export default function WorkspacePage() {
               try {
                 await apiRequest('DELETE', `/api/v1/workspaces/${activeWorkspaceId}`)
                 setWorkspaceId(null)
+                setSessionId(null)
+                bumpWorkspaceList()
                 showToast('已删除')
                 navigate('/projects')
               } catch (e) {

@@ -279,7 +279,7 @@ export default function ChatPage() {
     setRemoteRunId(null)
   }, [sessionId])
 
-  // 打开定时任务会话时：若后端仍在跑，轮询消息直到结束（避免工具跑完后像卡住）
+  // 定时任务等后台 run：订阅 live SSE，流式展示思考/正文/工具
   useEffect(() => {
     if (!sessionId || currentStreaming) {
       if (currentStreaming) {
@@ -290,10 +290,107 @@ export default function ChatPage() {
     }
     const sid = sessionId
     let cancelled = false
-    let timer: number | undefined
-    let wasActive = false
+    let abort: AbortController | null = null
+    let retryTimer: number | undefined
+    let idleProbes = 0
 
-    const poll = async () => {
+    const applyLiveEvent = (event: string, data: unknown) => {
+      const d = (data || {}) as Record<string, unknown>
+      lastStreamEventAt.current = Date.now()
+      if (useAppStore.getState().sessionId !== sid) return
+
+      if (event === 'live_attached') {
+        const rid = d.run_id ? String(d.run_id) : null
+        setRemoteRunning(true)
+        setRemoteRunId(rid)
+        setStreamHint((prev) => prev || '后台任务执行中…')
+        return
+      }
+      if (event === 'live_idle') {
+        setRemoteRunning(false)
+        setRemoteRunId(null)
+        return
+      }
+      if (event === 'live_sync') {
+        const reasoning = String(d.reasoning || '')
+        const content = String(d.content || '')
+        if (reasoning || content) {
+          appendMessage({ role: 'assistant', content, reasoning }, sid)
+        }
+        setStreamHint('')
+        return
+      }
+      if (event === 'status') {
+        const msg = typeof d.message === 'string' ? d.message : ''
+        if (msg) setStreamHint(msg)
+        return
+      }
+      if (event === 'token' || event === 'reasoning' || event === 'tool_start' || event === 'tool_result') {
+        setStreamHint('')
+      }
+      if (event === 'session_title') bumpSessionList()
+      if (event === 'token') patchLastAssistant(String(d.delta || ''), sid)
+      if (event === 'reasoning') patchLastReasoning(String(d.delta || ''), sid)
+      if (event === 'tool_start') {
+        appendMessage(
+          {
+            role: 'tool',
+            content: `调用工具 ${d.name}\n${JSON.stringify(d.arguments, null, 2)}`,
+          },
+          sid,
+        )
+      }
+      if (event === 'tool_result') {
+        appendMessage(
+          {
+            role: 'tool',
+            content: `工具结果 ${d.name}\n${JSON.stringify(d.result, null, 2)}`,
+          },
+          sid,
+        )
+      }
+      if (event === 'knowledge_hit') {
+        appendMessage(
+          {
+            role: 'tool',
+            content: `资料库引用\n${JSON.stringify(d.items, null, 2)}`,
+          },
+          sid,
+        )
+      }
+      if (event === 'context_usage') {
+        setContextUsage(parseContextUsage(d as Record<string, unknown>))
+      }
+      if (event === 'compress') {
+        setContextUsage((prev) =>
+          parseContextUsage(
+            {
+              ...(d as Record<string, unknown>),
+              compressed: true,
+              has_summary: true,
+            },
+            prev,
+          ),
+        )
+      }
+      if (event === 'error') {
+        setError(String(d.message || d.code || '后台任务失败'))
+      }
+      if (event === 'tool_confirm') {
+        void loadPendingConfirm(sid)
+      }
+      if (event === 'done' || event === 'live_closed' || event === 'error') {
+        setRemoteRunning(false)
+        setRemoteRunId(null)
+        setStreamHint('')
+        void loadMessages(sid)
+        void loadPendingConfirm(sid)
+        bumpSessionList()
+      }
+    }
+
+    const attachLive = async () => {
+      if (cancelled) return
       try {
         const st = await apiRequest<{
           active: boolean
@@ -302,35 +399,48 @@ export default function ChatPage() {
         if (cancelled || useAppStore.getState().sessionId !== sid) return
         if (useAppStore.getState().activeRuns[sid]) return
 
-        if (st.active) {
-          wasActive = true
-          setRemoteRunning(true)
-          setRemoteRunId(st.run?.id || null)
-          lastStreamEventAt.current = Date.now()
-          setStreamHint((prev) => prev || '后台任务执行中（完成后会自动刷新）…')
-          await loadMessages(sid)
-          if (!cancelled) timer = window.setTimeout(() => void poll(), 1600)
+        if (!st.active) {
+          setRemoteRunning(false)
+          setRemoteRunId(null)
+          idleProbes += 1
+          // 仅短窗口探测：覆盖「刚进会话、定时 run 尚未落库」
+          if (idleProbes <= 6) {
+            retryTimer = window.setTimeout(() => void attachLive(), 2000)
+          }
           return
         }
+        idleProbes = 0
 
-        setRemoteRunning(false)
-        setRemoteRunId(null)
-        if (wasActive) {
-          wasActive = false
-          setStreamHint('')
+        setRemoteRunning(true)
+        setRemoteRunId(st.run?.id || null)
+        await loadMessages(sid)
+        if (cancelled) return
+
+        abort?.abort()
+        abort = new AbortController()
+        try {
+          await apiStream(`/api/v1/sessions/${sid}/live`, {}, applyLiveEvent, { signal: abort.signal })
+        } catch (e) {
+          if (e instanceof StreamAbortedError || cancelled) return
+          // 流断开时若仍在跑，回退轮询消息并重连
+          retryTimer = window.setTimeout(() => void attachLive(), 1600)
+          return
+        }
+        if (!cancelled) {
           await loadMessages(sid)
-          void loadPendingConfirm(sid)
-          bumpSessionList()
+          setRemoteRunning(false)
+          setRemoteRunId(null)
         }
       } catch {
-        if (!cancelled) timer = window.setTimeout(() => void poll(), 3200)
+        if (!cancelled) retryTimer = window.setTimeout(() => void attachLive(), 3200)
       }
     }
 
-    void poll()
+    void attachLive()
     return () => {
       cancelled = true
-      if (timer) window.clearTimeout(timer)
+      abort?.abort()
+      if (retryTimer) window.clearTimeout(retryTimer)
     }
   }, [sessionId, currentStreaming])
 

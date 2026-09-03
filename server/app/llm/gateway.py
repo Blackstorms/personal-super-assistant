@@ -124,20 +124,39 @@ def _delta_content(delta: Any) -> str:
 
 
 def _content_duplicates_reasoning(content: str, reasoning_delta: str, acc_reasoning: str) -> bool:
-    """兼容网关把思考同时塞进 content / reasoning_content 的重复增量。"""
+    """兼容网关把思考同时塞进 content / reasoning_content 的重复增量。
+
+    注意：流式中文常见 1～数个字一帧。绝不能用「短串是否出现在整段思考里」来丢弃，
+    否则正文会被挖成天书（如 ¥300-500 → ¥300500，句中汉字大量失踪）。
+    """
     if not content:
         return True
     if not content.strip():
         # 思考 chunk 里夹带的空白不应提前打开正文
         return bool((reasoning_delta or "").strip())
+
     c = content.strip()
     r = (reasoning_delta or "").strip()
-    if r and (c == r or r.endswith(c) or c in r):
+    # 与本帧 reasoning 完全相同（双通道整段回声）
+    if r and c == r:
         return True
+    # 较长片段且本帧 reasoning 以其结尾（增量对齐）
+    if r and len(c) >= 8 and r.endswith(c):
+        return True
+
     ar = (acc_reasoning or "").strip()
-    if ar and (c == ar or ar.endswith(c)):
+    if not ar:
+        return False
+    # 与已累计思考完全相同（含 think 标签再次抽出的同句）
+    if c == ar:
         return True
-    if ar and len(c) <= 24 and c in ar:
+    # 短帧一律放行：避免「行」「关」「-」等落在长思考里被误杀
+    if len(c) < 8:
+        return False
+    if ar.endswith(c):
+        return True
+    # 仅当较长 stub 落在思考末尾窗口时视为回声
+    if len(c) >= 16 and c in ar[-max(120, len(c) * 3) :]:
         return True
     return False
 

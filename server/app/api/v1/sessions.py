@@ -8,6 +8,7 @@ import uuid
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from app.agent.session_bindings import save_session_composer_bindings, session_row_with_bindings
 from app.core.security import require_token
@@ -26,6 +27,12 @@ class SessionIn(BaseModel):
 class SessionPatch(BaseModel):
     title: str | None = None
     composer_bindings: dict | None = None
+
+
+class LiveBody(BaseModel):
+    """占位 body，兼容 Electron api:stream 的 POST 形态。"""
+
+    pass
 
 
 class AttachFileIn(BaseModel):
@@ -168,6 +175,29 @@ async def get_active_run(session_id: str, db: aiosqlite.Connection = Depends(db_
             "error_message": row["error_message"],
         },
     }
+
+
+@router.post("/{session_id}/live")
+async def session_live(
+    session_id: str,
+    _body: LiveBody = LiveBody(),
+    db: aiosqlite.Connection = Depends(db_dep),
+):
+    """订阅会话后台 run 的实时事件（定时任务打开会话时用）。"""
+    cur = await db.execute("SELECT id FROM sessions WHERE id=?", (session_id,))
+    if not await cur.fetchone():
+        raise HTTPException(404, detail={"code": "not_found", "message": "session not found"})
+
+    from app.agent.live_bus import live_bus
+
+    async def _gen():
+        async for ev in live_bus.subscribe(session_id):
+            yield {
+                "event": ev["event"],
+                "data": json.dumps(ev.get("data") or {}, ensure_ascii=False),
+            }
+
+    return EventSourceResponse(_gen(), ping=15000)
 
 
 @router.get("/{session_id}/pending-confirm")

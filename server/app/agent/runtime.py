@@ -313,45 +313,81 @@ async def run_chat_collect(
     mcp_ids: list[str] | None = None,
     bypass_whitelist: bool = False,
 ) -> dict[str, Any]:
-    """Headless 包装：消费 run_chat_stream，返回汇总结果（定时任务用）。"""
+    """Headless 包装：消费 run_chat_stream，返回汇总结果（定时任务用）。
+
+    同时把事件写入 live_bus，便于前端打开会话时订阅流式思考/正文。
+    """
+    from app.agent.live_bus import live_bus
+
     assistant_parts: list[str] = []
     run_id: str | None = None
     needs_confirm = False
     error: str | None = None
     message_id: str | None = None
+    bus_started = False
 
-    async for ev in run_chat_stream(
-        db,
-        registry,
-        session_id,
-        user_content,
-        enable_skills=enable_skills,
-        enable_mcp=enable_mcp,
-        enable_memory=enable_memory,
-        enable_knowledge=enable_knowledge,
-        mcp_manager=mcp_manager,
-        model_profile_id=model_profile_id,
-        expert_id=expert_id,
-        knowledge_ids=knowledge_ids,
-        skill_ids=skill_ids,
-        mcp_ids=mcp_ids,
-        use_attachments=False,
-        bypass_whitelist=bypass_whitelist,
-    ):
-        event = ev.get("event")
-        data = ev.get("data") or {}
-        if event == "run_started":
-            run_id = data.get("run_id") or run_id
-        elif event == "token":
-            assistant_parts.append(str(data.get("delta") or data.get("text") or ""))
-        elif event == "tool_confirm":
-            needs_confirm = True
-            run_id = data.get("run_id") or run_id
-            break
-        elif event == "error":
-            error = str(data.get("message") or data.get("code") or "error")
-        elif event == "done":
-            message_id = data.get("message_id")
+    try:
+        async for ev in run_chat_stream(
+            db,
+            registry,
+            session_id,
+            user_content,
+            enable_skills=enable_skills,
+            enable_mcp=enable_mcp,
+            enable_memory=enable_memory,
+            enable_knowledge=enable_knowledge,
+            mcp_manager=mcp_manager,
+            model_profile_id=model_profile_id,
+            expert_id=expert_id,
+            knowledge_ids=knowledge_ids,
+            skill_ids=skill_ids,
+            mcp_ids=mcp_ids,
+            use_attachments=False,
+            bypass_whitelist=bypass_whitelist,
+        ):
+            event = ev.get("event")
+            data = ev.get("data") or {}
+            if event == "run_started":
+                run_id = data.get("run_id") or run_id
+                if run_id:
+                    live_bus.begin(session_id, str(run_id))
+                    bus_started = True
+            # 终态由 finally 统一 end，避免重复 done/error
+            if bus_started and event and event not in {"done", "error", "tool_confirm"}:
+                live_bus.publish(session_id, str(event), data if isinstance(data, dict) else {})
+
+            if event == "token":
+                assistant_parts.append(str(data.get("delta") or data.get("text") or ""))
+            elif event == "tool_confirm":
+                needs_confirm = True
+                run_id = data.get("run_id") or run_id
+                break
+            elif event == "error":
+                error = str(data.get("message") or data.get("code") or "error")
+            elif event == "done":
+                message_id = data.get("message_id")
+    finally:
+        if bus_started:
+            if error:
+                live_bus.end(session_id, event="error", data={"message": error, "run_id": run_id})
+            elif needs_confirm:
+                live_bus.end(
+                    session_id,
+                    event="tool_confirm",
+                    data={"run_id": run_id, "message": "needs_confirmation"},
+                )
+            else:
+                live_bus.end(
+                    session_id,
+                    event="done",
+                    data={"run_id": run_id, "message_id": message_id},
+                )
+
+            async def _drop_later() -> None:
+                await asyncio.sleep(3.0)
+                live_bus.drop(session_id, str(run_id) if run_id else None)
+
+            asyncio.create_task(_drop_later())
 
     text = "".join(assistant_parts).strip()
     status = "success"

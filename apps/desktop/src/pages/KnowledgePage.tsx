@@ -134,14 +134,20 @@ export default function KnowledgePage() {
   useEffect(() => {
     if (!contextMenu) return
     const close = () => setContextMenu(null)
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t?.closest?.('.ctx-menu')) return
+      close()
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close()
     }
-    window.addEventListener('click', close)
+    // mousedown：避免菜单内拖选后外侧 mouseup/click 误关；菜单项内按下不关闭
+    window.addEventListener('mousedown', onDoc)
     window.addEventListener('scroll', close, true)
     window.addEventListener('keydown', onKey)
     return () => {
-      window.removeEventListener('click', close)
+      window.removeEventListener('mousedown', onDoc)
       window.removeEventListener('scroll', close, true)
       window.removeEventListener('keydown', onKey)
     }
@@ -440,6 +446,7 @@ export default function KnowledgePage() {
         <div
           className="ctx-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <button

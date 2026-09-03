@@ -87,6 +87,25 @@ def test_mux_drops_duplicate_content_during_native_reasoning():
     assert answer == "这是正文答案"
 
 
+def test_mux_keeps_short_content_chars_even_if_in_reasoning():
+    """回归：单字/短帧若因「出现在思考里」被丢，正文会挖成天书。"""
+    mux = StreamThinkMux()
+    reasoning = (
+        "用户想去北京旅游，4天，2人。关键信息：出发地、出行日期、预算档位、偏好。"
+        "先简短回应并提问，例如人均 ¥300-500。"
+    )
+    parts = mux.feed_delta(reasoning, "")
+    # 模拟流式逐字输出正文（许多字也出现在思考里）
+    final = "收到！自由行完全没问题。人均 ¥300-500，喜欢松弛别赶路。"
+    for ch in final:
+        parts += mux.feed_delta("", ch)
+    parts += mux.flush()
+    answer = "".join(p for k, p in parts if k == "token")
+    assert answer == final
+    assert "¥300-500" in answer
+    assert "自由行" in answer
+
+
 def test_mux_splits_think_tags_even_after_native_reasoning():
     mux = StreamThinkMux()
     parts = mux.feed_delta("内部推理", "<think>内部推理</think>\n\n给用户的答案")
