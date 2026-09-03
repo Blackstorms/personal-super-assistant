@@ -10,7 +10,7 @@ chmod +x scripts/*.sh
 ./scripts/install.sh
 ```
 
-Windows：`.\scripts\install.ps1`。脚本会检测 Python/Node、安装依赖、拉起 FastAPI（`/health` 检查）并打开 Electron 窗口。默认账号 `admin / admin`。
+Windows：`scripts\install.cmd`（内部调用 `install.ps1` 并绕过执行策略）。脚本会检测 Python/Node、安装依赖、拉起 FastAPI（`/health` 检查）并打开 Electron 窗口。默认账号 `admin / admin`。
 
 仅 Web UI（后端已由 install 拉起时）：
 

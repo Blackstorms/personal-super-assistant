@@ -1,4 +1,5 @@
 ﻿# Windows PowerShell 一键部署：环境检测 → 依赖安装 → 配置校验 → 启动后端与桌面端
+# Prefer scripts\install.cmd（绕过 ExecutionPolicy，可在 cmd / 资源管理器直接跑）
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Write-Host "[PSA] root: $Root"

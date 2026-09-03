@@ -13,6 +13,7 @@ __pycache__/
 uvicorn.pid
 server/.venv/
 server/.venv312/
+server/.venv-x64/
 server/tests/.testdata/
 apps/desktop/release/
 *.db

@@ -17,7 +17,7 @@
 源码侧配套（不在本目录，但属于交付包）：
 
 - 工程源码：`apps/desktop/`、`server/`、`skills/`、`resources/`
-- 一键安装：`scripts/install.sh`、`scripts/install.ps1`
+- 一键安装：`scripts/install.sh`、`scripts/install.cmd`（Windows，内部调 `install.ps1`）
 - 数据库脚本：`resources/db/schema.sql`、`resources/db/seed.sql`
 - 许可证：仓库根 `THIRD_PARTY_NOTICES.md`
 
