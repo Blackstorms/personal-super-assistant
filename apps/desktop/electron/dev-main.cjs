@@ -2,7 +2,7 @@
  * 开发态 Electron 入口（可选，与 vite-plugin-electron 二选一）。
  * 优先使用 server/.venv 中的 Python，避免系统 python3 无 uvicorn。
  */
-const { app, BrowserWindow, dialog, ipcMain, nativeTheme } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const http = require('node:http')
@@ -133,6 +133,12 @@ function createWindow() {
       nodeIntegration: false,
     },
   })
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
   void loadRenderer(win)
 }
 
@@ -171,6 +177,13 @@ app.whenReady().then(async () => {
       properties: ['openFile', 'openDirectory', 'multiSelections'],
     })
     return res.canceled || !res.filePaths.length ? null : res.filePaths
+  })
+  ipcMain.handle('shell:openExternal', async (_e, url) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      return { ok: false }
+    }
+    await shell.openExternal(url)
+    return { ok: true }
   })
   ipcMain.handle('api:request', async (_e, payload) => {
     const bodyStr = payload.body !== undefined ? JSON.stringify(payload.body) : undefined

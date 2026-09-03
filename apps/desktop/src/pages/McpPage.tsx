@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiRequest } from '../lib/api'
 import Modal from '../components/Modal'
 import Toast from '../components/Toast'
@@ -79,6 +79,14 @@ function envFromMcpManual(text: string): Record<string, string> {
   }
 }
 
+async function openExternalUrl(url: string) {
+  if (window.api?.openExternal) {
+    const r = await window.api.openExternal(url)
+    if (r?.ok !== false) return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 function feishuUserTokenInfo(env: Record<string, string>) {
   const tok = (
     env.USER_ACCESS_TOKEN ||
@@ -131,6 +139,8 @@ export default function McpPage() {
   const [feishuOAuthState, setFeishuOAuthState] = useState<string | null>(null)
   const [feishuOAuthBusy, setFeishuOAuthBusy] = useState(false)
   const [feishuOAuthHint, setFeishuOAuthHint] = useState('')
+  const [feishuAuthorizeUrl, setFeishuAuthorizeUrl] = useState('')
+  const feishuOAuthAbortRef = useRef(false)
 
   const isFeishuServer = (id: string | null) =>
     !!id && (id === 'preset-mcp-feishu' || id.toLowerCase().includes('feishu'))
@@ -142,25 +152,31 @@ export default function McpPage() {
 
   const startFeishuOAuth = async () => {
     if (!manualEditId || manualViewOnly) return
+    feishuOAuthAbortRef.current = false
     setFeishuOAuthBusy(true)
     setFeishuOAuthHint('')
+    setFeishuAuthorizeUrl('')
+    setFeishuOAuthState(null)
     try {
-      // 先保存当前 JSON（确保 APP_ID/SECRET 已写入）
-      const parsed = parseJsonConfig(manualText)
-      const payload = importSingleFromConfig(parsed)
-      await apiRequest('PATCH', `/api/v1/mcp/servers/${manualEditId}`, payload)
+      const env = envFromMcpManual(manualText)
       const r = await apiRequest<{
         state: string
         authorize_url: string
         hint?: string
         redirect_uri?: string
-      }>('POST', `/api/v1/mcp/servers/${manualEditId}/feishu-oauth/start`, {})
+      }>('POST', `/api/v1/mcp/servers/${manualEditId}/feishu-oauth/start`, {
+        app_id: String(env.APP_ID || env.FEISHU_APP_ID || '').trim() || undefined,
+        app_secret: String(env.APP_SECRET || env.FEISHU_APP_SECRET || '').trim() || undefined,
+      })
+      if (feishuOAuthAbortRef.current) return
       setFeishuOAuthState(r.state)
+      setFeishuAuthorizeUrl(r.authorize_url)
       setFeishuOAuthHint(r.hint || '')
-      window.open(r.authorize_url, '_blank', 'noopener,noreferrer')
-      const deadline = Date.now() + 120_000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+      await openExternalUrl(r.authorize_url)
+      const deadline = Date.now() + 180_000
+      while (Date.now() < deadline && !feishuOAuthAbortRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        if (feishuOAuthAbortRef.current) return
         const st = await apiRequest<{ status: string; saved_to_db?: boolean; message?: string }>(
           'GET',
           `/api/v1/mcp/servers/${manualEditId}/feishu-oauth/status?state=${encodeURIComponent(r.state)}`,
@@ -172,18 +188,27 @@ export default function McpPage() {
           const s = fresh.items.find((x) => x.id === manualEditId)
           if (s) setManualText(serverToMcpJson(s))
           setFeishuOAuthState(null)
+          setFeishuAuthorizeUrl('')
           return
         }
         if (st.status === 'error') {
           throw new Error(st.message || '授权失败')
         }
       }
+      if (feishuOAuthAbortRef.current) return
       throw new Error('授权超时，请重试')
     } catch (e) {
-      showToast(String(e), 'error')
+      if (!feishuOAuthAbortRef.current) showToast(String(e), 'error')
     } finally {
       setFeishuOAuthBusy(false)
     }
+  }
+
+  const cancelFeishuOAuth = () => {
+    feishuOAuthAbortRef.current = true
+    setFeishuOAuthBusy(false)
+    setFeishuOAuthState(null)
+    setFeishuAuthorizeUrl('')
   }
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -591,11 +616,23 @@ export default function McpPage() {
               {feishuOAuthBusy ? (
                 <>
                   <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                    {feishuOAuthState ? '已在浏览器打开授权页，请完成授权…' : '正在准备授权…'}
+                    {feishuOAuthState
+                      ? '已在系统浏览器打开授权页，请完成登录后回到这里。'
+                      : '正在打开系统浏览器…'}
                   </p>
-                  <button type="button" className="primary" disabled>
-                    等待浏览器授权…
-                  </button>
+                  {feishuAuthorizeUrl ? (
+                    <button type="button" onClick={() => void openExternalUrl(feishuAuthorizeUrl)}>
+                      浏览器未打开？再打开一次
+                    </button>
+                  ) : null}
+                  <div className="row" style={{ gap: 8 }}>
+                    <button type="button" className="primary" disabled>
+                      等待浏览器授权…
+                    </button>
+                    <button type="button" onClick={cancelFeishuOAuth}>
+                      取消
+                    </button>
+                  </div>
                 </>
               ) : feishuTokenInfo ? (
                 <div className="feishu-oauth-success">

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +18,7 @@ from app.mcp.config_file import export_mcp_config, mcp_config_path, sync_mcp_con
 from app.mcp.presets import preset_json_template, preset_meta
 
 router = APIRouter(dependencies=[Depends(require_token)])
+logger = logging.getLogger(__name__)
 
 FEISHU_PRESET_ID = "preset-mcp-feishu"
 
@@ -163,6 +166,26 @@ async def _maybe_reload_hermes(db: aiosqlite.Connection) -> None:
         pass
 
 
+def _reload_hermes_in_background() -> None:
+    """OAuth 回调里不要阻塞浏览器/轮询：MCP 冷启动放到后台。"""
+
+    async def _run() -> None:
+        from app.db.database import get_db
+
+        db_conn = await get_db()
+        try:
+            await _maybe_reload_hermes(db_conn)
+        except Exception:  # noqa: BLE001
+            logger.debug("feishu oauth background hermes reload failed", exc_info=True)
+        finally:
+            await db_conn.close()
+
+    try:
+        asyncio.get_running_loop().create_task(_run())
+    except RuntimeError:
+        logger.debug("no running loop for hermes reload")
+
+
 @router.post("/servers")
 async def create_server(body: McpIn, db: aiosqlite.Connection = Depends(db_dep)):
     data = await mcp_manager.create_server(db, body.model_dump())
@@ -251,6 +274,8 @@ async def mcp_hermes_status():
 
 class FeishuOAuthStartBody(BaseModel):
     scopes: str | None = None
+    app_id: str | None = None
+    app_secret: str | None = None
 
 
 @router.post("/servers/{server_id}/feishu-oauth/start")
@@ -265,6 +290,20 @@ async def feishu_oauth_start(
     _, env = await _load_server_env(db, server_id)
     from app.integrations.feishu_oauth import set_feishu_oauth_success_handler, start_feishu_oauth
 
+    body = body or FeishuOAuthStartBody()
+    app_id = str(body.app_id or env.get("APP_ID") or env.get("FEISHU_APP_ID") or "").strip()
+    app_secret = str(body.app_secret or env.get("APP_SECRET") or env.get("FEISHU_APP_SECRET") or "").strip()
+    # 只写 env，不要走 PATCH/update_server：那会 shutdown + 重注册全部 MCP，授权页要等十几秒。
+    env_changed = False
+    if app_id and env.get("APP_ID") != app_id:
+        env["APP_ID"] = app_id
+        env_changed = True
+    if app_secret and env.get("APP_SECRET") != app_secret:
+        env["APP_SECRET"] = app_secret
+        env_changed = True
+    if env_changed:
+        await _save_server_env(db, server_id, env)
+
     async def _persist(pending) -> None:
         from app.db.database import get_db
 
@@ -275,19 +314,19 @@ async def feishu_oauth_start(
             if pending.refresh_token:
                 cur_env["REFRESH_USER_ACCESS_TOKEN"] = pending.refresh_token
             await _save_server_env(db_conn, pending.server_id, cur_env)
-            await _maybe_reload_hermes(db_conn)
             pending.saved_to_db = True
             pending.message = "授权成功，已写入连接器"
         finally:
             await db_conn.close()
+        _reload_hermes_in_background()
 
     set_feishu_oauth_success_handler(_persist)
     try:
         return await start_feishu_oauth(
             server_id=server_id,
-            app_id=str(env.get("APP_ID") or env.get("FEISHU_APP_ID") or ""),
-            app_secret=str(env.get("APP_SECRET") or env.get("FEISHU_APP_SECRET") or ""),
-            scopes=(body.scopes if body else None),
+            app_id=app_id,
+            app_secret=app_secret,
+            scopes=body.scopes,
         )
     except ValueError as e:
         raise HTTPException(400, detail={"code": "invalid_config", "message": str(e)}) from e

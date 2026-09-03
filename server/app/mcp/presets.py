@@ -40,11 +40,9 @@ PRESET_MCPS: list[dict] = [
         "badge": None,
         "icon": "feishu",
         "transport": "stdio",
-        "command": "npx",
-        # 官方 @larksuiteoapi/lark-mcp：IM + 任务；凭证走 APP_ID/APP_SECRET
+        # 优先本地/全局 lark-mcp（见 scripts/ensure-lark-mcp.*），避免每次 npx -y 冷启动
+        "command": "lark-mcp",
         "args": [
-            "-y",
-            "@larksuiteoapi/lark-mcp",
             "mcp",
             "-t",
             "preset.im.default,preset.task.default,contact.v3.user.batchGetId",
@@ -404,6 +402,19 @@ def _should_upgrade_feishu(args: list, env: dict) -> bool:
     return False
 
 
+def _should_migrate_npx_to_lark(command: str, args: list) -> bool:
+    """已是官方包但仍走 npx -y 时，迁移到预装的 lark-mcp。"""
+    cmd = (command or "").strip()
+    arg_strs = [str(a) for a in args]
+    joined = " ".join(arg_strs)
+    clean = cmd == "lark-mcp" and _LARK_MCP_PKG not in joined and "-y" not in arg_strs
+    if clean:
+        return False
+    if cmd == "lark-mcp":
+        return True
+    return _LARK_MCP_PKG in joined or "lark-mcp" in joined
+
+
 async def upgrade_preset_mcps(db: aiosqlite.Connection) -> int:
     """
     升级已知错误预置（如飞书旧包无发消息能力）。
@@ -423,10 +434,11 @@ async def upgrade_preset_mcps(db: aiosqlite.Connection) -> int:
         args = []
     if not isinstance(env, dict):
         env = {}
+    command = str(data.get("command") or "npx")
     if not _should_upgrade_feishu(args, env):
-        # 已是官方包：补齐任务工具集 / OAuth 参数 / env 字段
+        # 已是官方包：补齐任务工具集 / OAuth 参数 / env 字段；npx → lark-mcp
         joined = " ".join(str(a) for a in args)
-        if _LARK_MCP_PKG not in joined:
+        if _LARK_MCP_PKG not in joined and "lark-mcp" not in joined and command != "lark-mcp":
             return 0
 
         app_id = str(env.get("APP_ID") or env.get("FEISHU_APP_ID") or "").strip()
@@ -460,19 +472,22 @@ async def upgrade_preset_mcps(db: aiosqlite.Connection) -> int:
         }
         need_task = "preset.task.default" not in joined and "task.v2.task.create" not in joined
         need_oauth = "--oauth" not in joined
+        need_lark_bin = _should_migrate_npx_to_lark(command, args)
         env_changed = merged_env != env or "REFRESH_USER_ACCESS_TOKEN" not in env
-        if not need_task and not need_oauth and not env_changed:
+        if not need_task and not need_oauth and not need_lark_bin and not env_changed:
             return 0
 
-        new_args = list(feishu["args"]) if need_task or need_oauth else list(args)
+        new_args = list(feishu["args"]) if (need_task or need_oauth or need_lark_bin) else list(args)
+        new_cmd = feishu["command"] if need_lark_bin else command
         now = utc_now()
         await db.execute(
             """
             UPDATE mcp_servers
-            SET args_json=?, env_json=?, updated_at=?
+            SET command=?, args_json=?, env_json=?, updated_at=?
             WHERE id=?
             """,
             (
+                new_cmd,
                 json.dumps(new_args, ensure_ascii=False),
                 json.dumps(merged_env, ensure_ascii=False),
                 now,

@@ -234,14 +234,36 @@ function AppShell({ username, onLogout }: { username: string | null; onLogout: (
   return (
     <div className="shell">
       <aside className="sidebar">
-        <AppBrand healthy={backendHealthy} />
+        <div className="sidebar-top">
+          <AppBrand healthy={backendHealthy} />
+          <div className="sidebar-top-actions">
+            <button
+              type="button"
+              className="sidebar-icon-btn"
+              title="筛选任务"
+              aria-label="筛选任务"
+              onClick={() => window.dispatchEvent(new CustomEvent('psa-sidebar-filter'))}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
 
-        <button type="button" className="btn-new" onClick={goNewTask}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          新建任务
-        </button>
+        <div className="sidebar-cta-row">
+          <button type="button" className="btn-new" onClick={goNewTask}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <path
+                d="M7 6.5h7.5a3 3 0 013 3V14a3 3 0 01-3 3H11l-4 3v-3H7a3 3 0 01-3-3V9.5a3 3 0 013-3z"
+                strokeLinejoin="round"
+              />
+              <path d="M12 9.5v5M9.5 12h5" strokeLinecap="round" />
+            </svg>
+            新建任务
+          </button>
+        </div>
 
         <SidebarSplit
           nav={

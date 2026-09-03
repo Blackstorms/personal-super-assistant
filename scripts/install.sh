@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# macOS / Linux 一键安装与启动脚本
+# macOS / Linux 一键部署：环境检测 → 依赖安装 → 配置校验 → 启动后端与桌面端
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "[PSA] project root: $ROOT"
@@ -27,6 +27,15 @@ else
   pip install -r "$ROOT/server/requirements.txt"
 fi
 
+if [[ -x "$ROOT/server/.venv/bin/python" ]]; then
+  PY="$ROOT/server/.venv/bin/python"
+elif [[ -x "$ROOT/server/.venv312/bin/python" ]]; then
+  PY="$ROOT/server/.venv312/bin/python"
+else
+  echo "[PSA] ERROR: venv python missing under server/.venv"
+  exit 1
+fi
+
 HERMES="$ROOT/third_party/hermes-agent"
 if [[ -f "$HERMES/model_tools.py" ]]; then
   echo "[PSA] vendored Hermes OK: $HERMES"
@@ -46,15 +55,50 @@ echo "[PSA] install desktop deps"
 cd "$ROOT/apps/desktop"
 # Electron 官方源在国内易超时，优先使用 npmmirror
 export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"
+export NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}"
+npm config set registry "${NPM_CONFIG_REGISTRY}" >/dev/null || true
 npm install
 
-echo "[PSA] start backend (background)"
-cd "$ROOT/server"
-nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 18765 > "$ROOT/server/uvicorn.log" 2>&1 &
-echo $! > "$ROOT/server/uvicorn.pid"
-sleep 2
-curl -sf http://127.0.0.1:18765/api/v1/health >/dev/null && echo "[PSA] backend healthy"
+# 预装飞书 MCP CLI（少走每次 npx -y）
+# shellcheck source=ensure-lark-mcp.sh
+bash "$ROOT/scripts/ensure-lark-mcp.sh" || echo "[PSA] WARN: ensure-lark-mcp failed"
 
-echo "[PSA] Done. Start UI with:"
-echo "  cd $ROOT/apps/desktop && npm run electron:dev"
-echo "Or open web UI: cd apps/desktop && npm run dev  (http://127.0.0.1:5173)"
+backend_healthy() {
+  curl -sf --max-time 2 "http://127.0.0.1:18765/api/v1/health" >/dev/null 2>&1
+}
+
+wait_backend() {
+  local i
+  for i in $(seq 1 45); do
+    if backend_healthy; then
+      echo "[PSA] backend healthy (http://127.0.0.1:18765)"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "[PSA] ERROR: backend health check failed. log: $ROOT/server/uvicorn.log"
+  tail -n 40 "$ROOT/server/uvicorn.log" 2>/dev/null || true
+  return 1
+}
+
+if backend_healthy; then
+  echo "[PSA] backend already running, reuse"
+else
+  echo "[PSA] start backend (background)"
+  cd "$ROOT/server"
+  nohup "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port 18765 > "$ROOT/server/uvicorn.log" 2>&1 &
+  echo $! > "$ROOT/server/uvicorn.pid"
+  wait_backend
+fi
+
+echo "[PSA] start desktop UI (Vite + Electron)"
+echo "[PSA] 后端 http://127.0.0.1:18765"
+echo "[PSA] 将打开登录页，请手动登录（默认账号 admin / admin）"
+echo "[PSA] 关闭窗口或 Ctrl+C 结束界面（后端继续在本机运行）"
+cd "$ROOT/apps/desktop"
+if [[ -n "${ELECTRON_RUN_AS_NODE+x}" ]]; then
+  unset ELECTRON_RUN_AS_NODE
+fi
+export PSA_SHOW_LOGIN=1
+export VITE_PSA_SHOW_LOGIN=1
+npm start

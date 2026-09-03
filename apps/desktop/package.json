@@ -6,9 +6,10 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
+    "start": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron electron/dev-main.cjs\"",
     "build": "tsc -p tsconfig.json --noEmit && vite build && tsc -p tsconfig.node.json",
     "preview": "vite preview",
-    "electron:dev": "env -u ELECTRON_RUN_AS_NODE concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on tcp:127.0.0.1:5173 && env -u ELECTRON_RUN_AS_NODE electron electron/dev-main.cjs\"",
+    "electron:dev": "env -u ELECTRON_RUN_AS_NODE npm start",
     "electron:build": "npm run build && electron-builder",
     "electron:build:mac": "npm run build && electron-builder --mac --arm64",
     "electron:build:mac:x64": "npm run build && electron-builder --mac --x64",

@@ -7,7 +7,7 @@
  * 3. 提供类型化 IPC：选目录、HTTP/SSE 代理、后端状态
  */
 
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -325,6 +325,12 @@ function createWindow() {
     },
   })
   attachRendererDiagnostics(mainWindow)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
   mainWindow.once('ready-to-show', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show()
   })
@@ -432,6 +438,14 @@ app.whenReady().then(() => {
     })
     if (res.canceled || !res.filePaths.length) return null
     return res.filePaths
+  })
+
+  ipcMain.handle('shell:openExternal', async (_e, url: string) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      return { ok: false }
+    }
+    await shell.openExternal(url)
+    return { ok: true }
   })
 
   ipcMain.handle('api:request', async (_e, payload) => proxyRequest(payload))

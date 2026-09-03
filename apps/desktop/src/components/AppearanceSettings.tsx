@@ -4,7 +4,7 @@ import { useThemeStore } from '../stores/theme'
 type PreviewColors = { sidebar: string; surface: string; soft: string; userBubble?: string }
 
 const PREVIEW_COLORS: Partial<Record<ThemeMode, PreviewColors>> = {
-  light: { sidebar: '#ebecee', surface: '#ffffff', soft: '#f7f8fa' },
+  light: { sidebar: '#f5f5f5', surface: '#ffffff', soft: '#f7f8fa' },
   dark: { sidebar: '#16181c', surface: '#25282e', soft: '#2c3036' },
   system: { sidebar: '#d8dce0', surface: '#f0f2f5', soft: '#e8eaed' },
   'deepsea-dark': { sidebar: '#0f1820', surface: '#1F2E3D', soft: '#121C26', userBubble: '#0891B2' },

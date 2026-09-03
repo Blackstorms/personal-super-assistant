@@ -13,11 +13,13 @@ export type ApiRequest = {
 const api = {
   backendStatus: () => ipcRenderer.invoke('backend:status'),
   backendRestart: () => ipcRenderer.invoke('backend:restart'),
+  forceLogin: process.env.PSA_SHOW_LOGIN === '1' || process.env.VITE_PSA_SHOW_LOGIN === '1',
   setAuthToken: (token: string) => ipcRenderer.invoke('auth:setToken', token),
   clearAuthToken: () => ipcRenderer.invoke('auth:clearToken'),
   setThemeSource: (source: 'system' | 'light' | 'dark') => ipcRenderer.invoke('theme:setSource', source),
   selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory') as Promise<string | null>,
   selectFiles: () => ipcRenderer.invoke('dialog:selectFiles') as Promise<string[] | null>,
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url) as Promise<{ ok: boolean }>,
   request: (payload: ApiRequest) => ipcRenderer.invoke('api:request', payload),
   stream: (
     payload: { path: string; body: unknown; requestId: string },

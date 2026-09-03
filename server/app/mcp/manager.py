@@ -231,8 +231,11 @@ class MCPManager:
                     raise ValueError("stdio requires command")
                 args = json.loads(row["args_json"] or "[]")
                 env = json.loads(row["env_json"] or "{}")
+                from app.mcp.lark_cmd import resolve_stdio_launch
+
+                command, args = resolve_stdio_launch(str(row["command"]), args)
                 params = StdioServerParameters(
-                    command=row["command"],
+                    command=command,
                     args=args,
                     env=env or None,
                 )

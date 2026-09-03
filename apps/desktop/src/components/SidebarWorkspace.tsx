@@ -181,6 +181,12 @@ export default function SidebarWorkspace() {
   const [knowledge, setKnowledge] = useState<Knowledge[]>([])
   const [creating, setCreating] = useState(false)
 
+  useEffect(() => {
+    const onFilter = () => setFilterOpen(true)
+    window.addEventListener('psa-sidebar-filter', onFilter)
+    return () => window.removeEventListener('psa-sidebar-filter', onFilter)
+  }, [])
+
   const refresh = useCallback(async () => {
     try {
       const [s, p] = await Promise.all([
@@ -484,7 +490,7 @@ export default function SidebarWorkspace() {
         ) : (
           <div className="ws-section">
             <div className="ws-section-title-row">
-              <h3 className="ws-section-title">按时间分组</h3>
+              <h3 className="ws-section-title">最近任务</h3>
             </div>
             <div className="ws-section-body">
               {groupedSessions.length === 0 ? (

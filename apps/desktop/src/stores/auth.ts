@@ -17,6 +17,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   username: null,
   hydrated: false,
   hydrate: () => {
+    const forceLogin =
+      import.meta.env.VITE_PSA_SHOW_LOGIN === '1' || window.api?.forceLogin === true
+    if (forceLogin) {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(USER_KEY)
+      if (window.api?.clearAuthToken) void window.api.clearAuthToken()
+      set({ token: null, username: null, hydrated: true })
+      return
+    }
     const token = localStorage.getItem(TOKEN_KEY)
     const username = localStorage.getItem(USER_KEY)
     set({ token, username, hydrated: true })

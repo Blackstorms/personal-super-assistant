@@ -23,6 +23,29 @@ def test_should_upgrade_old_feishu_package():
     )
 
 
+def test_should_migrate_npx_to_lark():
+    from app.mcp.presets import _should_migrate_npx_to_lark
+
+    assert _should_migrate_npx_to_lark(
+        "npx", ["-y", "@larksuiteoapi/lark-mcp", "mcp", "-l", "zh"]
+    )
+    assert not _should_migrate_npx_to_lark("lark-mcp", ["mcp", "-l", "zh"])
+
+
+def test_resolve_stdio_launch_prefers_local_bin():
+    from app.mcp.lark_cmd import resolve_stdio_launch, which_lark_mcp
+
+    bin_path = which_lark_mcp()
+    if not bin_path:
+        return
+    cmd, args = resolve_stdio_launch(
+        "npx", ["-y", "@larksuiteoapi/lark-mcp", "mcp", "-l", "zh"]
+    )
+    assert "lark-mcp" in cmd
+    assert args[0] == "mcp"
+    assert "@larksuiteoapi/lark-mcp" not in args
+
+
 def _prepare_db(subdir: str) -> Path:
     data = Path(__file__).resolve().parent / ".testdata" / subdir
     data.mkdir(parents=True, exist_ok=True)
@@ -67,12 +90,14 @@ async def test_upgrade_feishu_preserves_credentials():
         n = await upgrade_preset_mcps(db)
         assert n == 1
         cur = await db.execute(
-            "SELECT args_json, env_json, enabled FROM mcp_servers WHERE id='preset-mcp-feishu'"
+            "SELECT command, args_json, env_json, enabled FROM mcp_servers WHERE id='preset-mcp-feishu'"
         )
         row = dict(await cur.fetchone())
         args = json.loads(row["args_json"])
         env = json.loads(row["env_json"])
-        assert "@larksuiteoapi/lark-mcp" in args
+        assert row["command"] == "lark-mcp"
+        assert "@larksuiteoapi/lark-mcp" not in args
+        assert args[0] == "mcp"
         assert env["APP_ID"] == "cli_test_id"
         assert env["APP_SECRET"] == "secret_test"
         assert row["enabled"] == 1

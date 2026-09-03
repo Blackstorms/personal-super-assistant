@@ -6,11 +6,13 @@ declare global {
     api: {
       backendStatus: () => Promise<{ healthy: boolean; port: number; hasToken: boolean; error?: string }>
       backendRestart: () => Promise<{ ok: boolean }>
+      forceLogin?: boolean
       setAuthToken: (token: string) => Promise<{ ok: boolean }>
       clearAuthToken: () => Promise<{ ok: boolean }>
       setThemeSource: (source: 'system' | 'light' | 'dark') => Promise<{ ok: boolean }>
       selectDirectory: () => Promise<string | null>
       selectFiles: () => Promise<string[] | null>
+      openExternal?: (url: string) => Promise<{ ok: boolean }>
       request: (payload: {
         method: string
         path: string

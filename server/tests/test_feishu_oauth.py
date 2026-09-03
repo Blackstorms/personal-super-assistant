@@ -32,6 +32,7 @@ async def test_start_feishu_oauth_builds_authorize_url():
     assert "redirect_uri=" in r["authorize_url"]
     assert "localhost" in r["redirect_uri"]
     assert r["state"]
+    assert r["redirect_uri"] in r["hint"]
     st = get_feishu_oauth_status(r["state"])
     assert st["status"] == "pending"
 

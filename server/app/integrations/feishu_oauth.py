@@ -225,15 +225,21 @@ async def start_feishu_oauth(
         "scope": scope,
     }
     authorize_url = f"{AUTHORIZE_URL}?{urlencode(params)}"
+    port_note = ""
+    if port != settings.feishu_oauth_port:
+        port_note = (
+            f"默认 {feishu_oauth_callback_url()} 已被占用，当前实际回调为 {redirect_uri}，"
+            "请把该地址加入开放平台重定向 URL。"
+        )
     return {
         "state": state,
         "authorize_url": authorize_url,
         "redirect_uri": redirect_uri,
         "expires_in_sec": _OAUTH_TTL_SEC,
         "hint": (
-            "桌面本地应用标准做法：在飞书开放平台 → 安全设置 → 重定向 URL 添加 "
-            f"{feishu_oauth_callback_url()}（与 lark-mcp 官方一致，localhost 环回，"
-            "每位用户在自己电脑上完成授权）；并开启「刷新 user_access_token」。"
+            "已用系统浏览器打开授权页。请在飞书开放平台 → 安全设置 → 重定向 URL 添加 "
+            f"{redirect_uri}（localhost 环回，与 lark-mcp 一致）；并开启「刷新 user_access_token」。"
+            + (port_note and f" {port_note}")
         ),
     }
 

@@ -49,8 +49,14 @@ def row_to_hermes_config(row: dict) -> dict[str, Any]:
         "enabled": bool(row.get("enabled", True)),
     }
     if transport == "stdio":
-        cfg["command"] = row.get("command") or ""
-        cfg["args"] = list(args or [])
+        from app.mcp.lark_cmd import resolve_stdio_launch
+
+        command, resolved_args = resolve_stdio_launch(
+            str(row.get("command") or ""),
+            list(args or []),
+        )
+        cfg["command"] = command
+        cfg["args"] = resolved_args
         if env:
             cfg["env"] = dict(env)
     else:

@@ -5,18 +5,18 @@
 ## 快速开始
 
 ```bash
-# macOS / Linux
+# macOS / Linux：安装依赖并启动后端 + 桌面端
 chmod +x scripts/*.sh
 ./scripts/install.sh
-cd apps/desktop && npm run electron:dev
-
-# 或仅 Web UI + 后端
-cd server && source .venv/bin/activate
-uvicorn app.main:app --host 127.0.0.1 --port 18765
-cd apps/desktop && npm run dev
 ```
 
-Windows 使用 `scripts/install.ps1`。
+Windows：`.\scripts\install.ps1`。脚本会检测 Python/Node、安装依赖、拉起 FastAPI（`/health` 检查）并打开 Electron 窗口。默认账号 `admin / admin`。
+
+仅 Web UI（后端已由 install 拉起时）：
+
+```bash
+cd apps/desktop && npm run dev   # http://127.0.0.1:5173
+```
 
 侧栏绿点表示后端（`127.0.0.1:18765`）正常；红点时按钮调用会失败，可点页面顶部「重试连接 / 重启后端」。
 
